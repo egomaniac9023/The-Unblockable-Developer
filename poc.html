@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced DevTools Blocking PoC</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; }
+        #message { color: red; font-weight: bold; border: 2px solid red; padding: 10px; margin-top: 20px; }
+        .info { background-color: #f0f0f0; padding: 15px; border-left: 5px solid #ccc; margin-bottom: 15px;}
+    </style>
+</head>
+<body>
+    <h1>Advanced Proof-of-Concept: The Futility of Blocking Developer Tools</h1>
+    <div class="info">
+        <strong>Instructions:</strong> Open the developer tools (F12, Ctrl+Shift+I, or via the menu). Observe the attempts to detect it. Then, use the DevTools themselves to neutralize these scripts to see how easily they are defeated.
+    </div>
+    <div id="message"></div>
+
+    <script>
+        // --- CORE ARGUMENT: WHY THIS ENTIRE SCRIPT IS POINTLESS ---
+        // 1. The Client is King: The user has 100% control over the client-side environment (their browser). They can disable JavaScript, modify it in-flight, remove event listeners, or override functions. Any client-side "protection" is built on sand.
+        // 2. Easily Bypassed: Every single technique below can be neutralized in seconds by a moderately skilled user with the very tools you are trying to block.
+        // 3. Negative User Experience (UX): This alienates legitimate users like developers, security researchers, accessibility auditors, and students learning to code. It breaks the open nature of the web.
+        // 4. Security Theater: It provides a dangerous, false sense of security, leading developers to neglect what truly matters: robust server-side security.
+
+        const messageElement = document.getElementById('message');
+        let detectionCount = 0;
+
+        function triggerDetection(methodName) {
+            detectionCount++;
+            messageElement.innerHTML = `[Detection #${detectionCount}] DevTools detected via <strong>${methodName}</strong>. <br>This is a futile measure. All critical security must be on the server.`;
+
+            // "Blocking" action: The debugger statement.
+            // A user simply has to click "Deactivate breakpoints" or "Never pause here" in the DevTools to permanently ignore this for the session.
+            debugger;
+        }
+
+        (function() {
+            // --- METHOD 1: The 'debugger' Statement Timing ---
+            // Concept: The 'debugger' statement takes virtually no time to execute if DevTools are closed. If they are open, it causes a pause, resulting in a significant time difference.
+            // Weakness: Trivial to bypass by deactivating breakpoints in the DevTools.
+            const checkDebugger = () => {
+                const startTime = performance.now();
+                debugger;
+                const endTime = performance.now();
+                if (endTime - startTime > 100) {
+                    triggerDetection("Debugger Statement Timing");
+                }
+            };
+
+            // --- METHOD 2: Window Resize Check ---
+            // Concept: Docked DevTools reduce the viewport size relative to the outer window size.
+            // Weakness: Fails if DevTools are undocked. Causes false positives if the user just resizes their browser. Useless in modern workflows.
+            const checkResize = () => {
+                const threshold = 160;
+                if ((window.outerWidth - window.innerWidth) > threshold || (window.outerHeight - window.innerHeight) > threshold) {
+                    triggerDetection("Window Resize");
+                }
+            };
+
+            // --- METHOD 3: The console.log() Object Getter ---
+            // Concept: When an object is printed to the console, the browser may access its properties (like a getter) to display it. We can set a flag inside that getter.
+            // Weakness: Relies on non-standard browser behavior that can change. Can be defeated by overriding console.log (e.g., `console.log = function(){};`).
+            const devtoolsObject = {
+                _isOpen: false,
+                get isOpen() {
+                    this._isOpen = true;
+                    return false;
+                }
+            };
+
+            const checkConsole = () => {
+                devtoolsObject._isOpen = false;
+                console.log('%c', devtoolsObject);
+                if (devtoolsObject._isOpen) {
+                    triggerDetection("console.log Object Getter");
+                }
+            };
+
+            // --- METHOD 4: Keyboard Shortcut Listener ---
+            // Concept: Listen for common keyboard shortcuts used to open DevTools.
+            // Weakness: The user can simply open DevTools from the browser menu. Or, once DevTools are open, they can use them to remove this very event listener.
+            window.addEventListener('keydown', function(event) {
+                if (event.key === 'F12' || (event.ctrlKey && event.shiftKey && (event.key === 'I' || event.key === 'J' || event.key === 'C'))) {
+                    event.preventDefault(); // This is also easily bypassed.
+                    triggerDetection("Keyboard Shortcut Listener");
+                }
+            });
+
+            // Run detection checks in an interval.
+            // A user can find and disable this interval with one line in the console: `clearInterval(window.devToolsChecker);`
+            window.devToolsChecker = setInterval(() => {
+                checkDebugger();
+                checkResize();
+                checkConsole();
+            }, 1500);
+        })();
+    </script>
+</body>
+</html>
